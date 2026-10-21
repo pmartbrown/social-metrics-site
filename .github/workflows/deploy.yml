@@ -5,7 +5,7 @@
 # Where the files come from:
 #   - BUILD_READ_KEY set   -> real dashboard, cloned from the PRIVATE repo pmartbrown/social-metrics-site-build
 #                             (read-only deploy key scoped to that one repo; it holds built files only)
-#   - BUILD_READ_KEY unset -> the clearly labelled SAMPLE preview in sample/ (made-up data)
+#   - BUILD_READ_KEY unset -> fail (sample/ was removed after go-live setup)
 # Triggers: schedule and manual only. No pull_request triggers, so forks never get the key.
 name: deploy
 on:
