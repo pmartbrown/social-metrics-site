@@ -18,7 +18,7 @@
   function init() {
     if (D.sample) document.getElementById("sample").classList.remove("hidden");
     const b = document.getElementById("banner");
-    b.innerHTML = `Last updated: ${esc(mt(D.built_at_utc))} · data as of ${esc(mt(D.data_as_of_utc))}` + (D.open_alerts ? ` · ${D.open_alerts} open alert(s)` : "");
+    b.innerHTML = `Last updated: ${esc(mt(D.built_at_utc))} · data as of ${esc(mt(D.data_as_of_utc))}`;
     const stale = !D.data_as_of_utc || (Date.now() - new Date(D.data_as_of_utc)) > 26 * 3600e3;
     const notes = D.accounts.filter((a) => a.note).map((a) => `<div class="note">${esc(a.note)}</div>`).join("");
     if (notes) b.insertAdjacentHTML("afterend", notes);
@@ -111,7 +111,7 @@
       const late = s && s.late === "true";
       const v = (k, f) => s ? f(s[k]) : "";
       const detail = p.snapshots.map((x) => `<tr class="${x.late === "true" ? "late" : ""}"><td>${esc(LABELS[x.label] || x.label)}${x.late === "true" ? ` (late, ${x.age_hours}h)` : ""}</td><td class="num">${int(x.views)}</td><td class="num">${int(x.likes)}</td><td class="num">${int(x.comments)}</td><td class="num">${int(x.shares)}</td><td class="num">${int(x.saves)}</td><td class="num">${int(x.reach)}</td><td class="num">${pct(x.avg_view_pct, 0)}</td><td class="num">${x.avg_watch_s == null ? `<span class="na">${NA}</span>` : x.avg_watch_s + "s"}</td><td class="num">${int(x.follows_gained)}</td></tr>`).join("");
-      return `<tr class="${late ? "late" : ""}${p.status === "deleted" ? " late" : ""}"><td>${p.thumb ? `<img class="thumb" alt="" src="${esc(p.thumb)}">` : ""}</td><td>${esc(mtDate(p.published_at_utc))}</td><td>${esc(p.account_label)}</td><td>${esc(p.format)}</td><td>${esc(p.hook_type || "—")}</td><td>${esc(p.topic || "—")}</td>` +
+      return `<tr class="${late ? "late" : ""}${p.status === "deleted" ? " late" : ""}"><td>${p.thumb ? `<img class="thumb" alt="" src="${esc(p.thumb)}">` : ""}</td><td>${esc(mtDate(p.published_at_utc))}</td><td>${esc(p.account_label)}</td><td>${esc(p.format)}</td><td>${p.hook_type ? esc(p.hook_type) : '<span class="na">needs tag</span>'}</td><td>${p.topic ? esc(p.topic) : '<span class="na">needs tag</span>'}</td>` +
         `<td><details><summary><a href="${esc(p.url)}" rel="noopener noreferrer" target="_blank">${esc(p.caption || "(no caption)")}</a>${p.status === "deleted" ? " (deleted)" : ""}</summary><table><tr><th>When</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Saves</th><th>Reach</th><th>Watch-through</th><th>Avg watch</th><th>Follows</th></tr>${detail}</table></details></td>` +
         `<td class="num">${v("views", int)}</td><td class="num">${score}${late ? " (late)" : ""}</td></tr>`;
     }).join("");

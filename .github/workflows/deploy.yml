@@ -1,0 +1,93 @@
+# Deploys the Social Scorecard to GitHub Pages as an ARTIFACT (Pages source = "GitHub Actions").
+# Built site files are never committed to this public repo, so its git history never accumulates
+# old data.json or thumbnails, and each deploy fully replaces the last one.
+#
+# Where the files come from:
+#   - BUILD_READ_KEY set   -> real dashboard, cloned from the PRIVATE repo pmartbrown/social-metrics-site-build
+#                             (read-only deploy key scoped to that one repo; it holds built files only)
+#   - BUILD_READ_KEY unset -> the clearly labelled SAMPLE preview in sample/ (made-up data)
+# Triggers: schedule and manual only. No pull_request triggers, so forks never get the key.
+name: deploy
+on:
+  schedule:
+    - cron: "17 2,14 * * *"   # 30 min after the private build (01:47 / 13:47 UTC)
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: write   # delete this run's artifact after deploy; keep the schedule enabled
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Get built site
+        env:
+          BUILD_READ_KEY: ${{ secrets.BUILD_READ_KEY }}
+        run: |
+          set -eu
+          mkdir out
+          if [ -n "${BUILD_READ_KEY:-}" ]; then
+            k="$RUNNER_TEMP/build_read"; printf '%s\n' "$BUILD_READ_KEY" > "$k"; chmod 600 "$k"
+            # GitHub's published ed25519 host key (api.github.com/meta), pinned.
+            echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$RUNNER_TEMP/kh"
+            GIT_SSH_COMMAND="ssh -i $k -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/kh -o StrictHostKeyChecking=yes" \
+              git clone -q --depth 1 git@github.com:pmartbrown/social-metrics-site-build.git "$RUNNER_TEMP/b"
+            rm -f "$k"
+            ( cd "$RUNNER_TEMP/b" && git ls-files -z | xargs -0 -I{} cp --parents {} "$GITHUB_WORKSPACE/out/" )
+            echo "source: private build"
+          else
+            cp -r sample/. out/
+            echo "source: SAMPLE preview"
+          fi
+      - name: Check files (allowlist + secret scan)
+        run: |
+          set -eu
+          cd out
+          bad=$(find . -type f | sed 's|^\./||' | grep -vE '^(index\.html|app\.js|style\.css|data\.json|\.nojekyll|\.inputs-hash|thumbs/[A-Za-z0-9_.-]+\.jpg)$' || true)
+          if [ -n "$bad" ]; then echo "refusing: unexpected files"; exit 1; fi
+          cat > "$RUNNER_TEMP/pats" <<'PATS'
+          EAA[A-Za-z0-9]{20,}
+          ya29\.[A-Za-z0-9_-]{10,}
+          1//0[A-Za-z0-9_-]{20,}
+          \b(act|rft)\.[A-Za-z0-9!*._-]{10,}
+          GOCSPX-[A-Za-z0-9_-]{10,}
+          AAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]{10,}
+          \b[0-9]{6,20}-[A-Za-z0-9]{25,}
+          ghp_[A-Za-z0-9]{20,}
+          github_pat_[A-Za-z0-9_]{20,}
+          (access_token|refresh_token|client_secret|oauth_token|oauth_signature)(=|%3D)
+          PRIVATE KEY
+          PATS
+          sed -i 's/^ *//' "$RUNNER_TEMP/pats"
+          if grep -rqIE -f "$RUNNER_TEMP/pats" .; then echo "refusing: secret-like string found"; exit 1; fi
+          echo "ok"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: out
+          retention-days: 1
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: Delete this run's artifact (the live site no longer needs it)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[].id'); do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null && echo "deleted artifact $id"
+          done
+      - name: Keep the schedule enabled (GitHub pauses schedules after 60 days without repo activity)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/enable" >/dev/null || echo "could not re-enable (check manually)"
