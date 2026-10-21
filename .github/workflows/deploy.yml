@@ -10,7 +10,7 @@
 name: deploy
 on:
   schedule:
-    - cron: "17 2,14 * * *"   # 30 min after the private build (01:47 / 13:47 UTC)
+    - cron: "17 * * * *"   # hourly (public repos don't use Actions minutes); new data appears after each private build
   workflow_dispatch:
 permissions: {}
 concurrency:
@@ -55,6 +55,7 @@ jobs:
         run: |
           set -eu
           cd out
+          [ -s index.html ] && [ -s data.json ] || { echo "refusing: build is incomplete (no index.html/data.json)"; exit 1; }
           bad=$(find . -type f | sed 's|^\./||' | grep -vE '^(index\.html|app\.js|style\.css|data\.json|\.nojekyll|\.inputs-hash|thumbs/[A-Za-z0-9_.-]+\.jpg)$' || true)
           if [ -n "$bad" ]; then echo "refusing: unexpected files"; exit 1; fi
           cat > "$RUNNER_TEMP/pats" <<'PATS'
